@@ -51,11 +51,14 @@ def main() -> None:
                 dbconn=dbconn.conn,
                 for_testing=args.test
             )
-            rabbitmq_client.receive_messages(queue='contest',
-                                             exchange='certificates',
-                                             routing_key='ContestQueue',
-                                             channel=channel,
-                                             callback=callback)
+            rabbitmq_connection.initialize_dlq_topology(channel)
+            rabbitmq_client.receive_messages(
+                queue='contest',
+                exchange='certificates',
+                routing_key='ContestQueue',
+                channel=channel,
+                callback=callback,
+                dead_letter_exchange=rabbitmq_connection.DEAD_LETTER_EXCHANGE)
     finally:
         dbconn.conn.close()
         logging.info('Done')
