@@ -414,4 +414,63 @@ class CertificatesTest extends \OmegaUp\Test\ControllerTestCase {
             );
         }
     }
+
+    /**
+     * A contest stuck in the queued state can be regenerated
+     */
+    public function testRegenerateQueuedContestCertificates() {
+        ['identity' => $supportTeamMember] = \OmegaUp\Test\Factories\User::createSupportUser();
+        ['identity' => $identity] = \OmegaUp\Test\Factories\User::createUser();
+
+        $loginSupport = self::login($supportTeamMember);
+        \OmegaUp\Controllers\User::apiAddRole(new \OmegaUp\Request([
+            'auth_token' => $loginSupport->auth_token,
+            'username' => $identity->username,
+            'role' => 'CertificateGenerator'
+        ]));
+
+        $currentTime = \OmegaUp\Time::get();
+        $timePast1 =  new \OmegaUp\Timestamp($currentTime - 120 * 60);
+        $timePast2 =  new \OmegaUp\Timestamp($currentTime - 60 * 60);
+        $contestData = \OmegaUp\Test\Factories\Contest::createContest(
+            new \OmegaUp\Test\Factories\ContestParams([
+                'alias' => 'pasado',
+                'startTime' => $timePast1,
+                'finishTime' => $timePast2,
+            ])
+        );
+
+        \OmegaUp\Test\Factories\Contest::addAdminUser(
+            $contestData,
+            $identity
+        );
+
+        $contest = \OmegaUp\DAO\Contests::getByAlias(
+            $contestData['contest']->alias
+        );
+        $contest->certificates_status = 'queued';
+        \OmegaUp\DAO\Contests::update($contest);
+
+        \OmegaUp\Test\Utils::runInitializeRabbitmq(
+            queue: 'contest',
+            exchange: 'certificates',
+            routingKey: 'ContestQueue'
+        );
+
+        $loginIdentity = self::login($identity);
+        $response = \OmegaUp\Controllers\Certificate::apiGenerateContestCertificates(
+            new \OmegaUp\Request([
+                'auth_token' => $loginIdentity->auth_token,
+                'contest_alias' => $contestData['contest']->alias,
+                'certificates_cutoff' => 3
+            ])
+        );
+
+        $this->assertSame('ok', $response['status']);
+
+        $contest = \OmegaUp\DAO\Contests::getByAlias(
+            $contestData['contest']->alias
+        );
+        $this->assertSame('queued', $contest->certificates_status);
+    }
 }

@@ -602,7 +602,8 @@ class Certificate extends \OmegaUp\Controllers\Controller {
         // check that the certificates can be generated
         if (
             $contest->certificates_status !== 'uninitiated' &&
-            $contest->certificates_status !== 'retryable_error'
+            $contest->certificates_status !== 'retryable_error' &&
+            $contest->certificates_status !== 'queued'
         ) {
             throw new \OmegaUp\Exceptions\InvalidParameterException(
                 'contestCertificatesError'
