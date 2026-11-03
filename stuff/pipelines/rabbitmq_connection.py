@@ -11,6 +11,19 @@ import logging
 import pika
 
 
+CERTIFICATES_EXCHANGE = 'certificates'
+CONTEST_QUEUE = 'contest'
+CONTEST_ROUTING_KEY = 'ContestQueue'
+
+DEAD_LETTER_EXCHANGE = 'certificates-dlx'
+DEAD_LETTER_QUEUE = 'contest-dlq'
+DEAD_LETTER_ROUTING_KEY = 'ContestDeadLetter'
+
+RETRY_QUEUE = 'contest-retry'
+RETRY_ROUTING_KEY = 'ContestRetry'
+RETRY_TTL_MS = 30000
+
+
 @contextlib.contextmanager
 def connect(
         *, username: str, password: str, host: str, for_testing: bool = False
@@ -73,3 +86,39 @@ def initialize_rabbitmq(
     channel.queue_bind(exchange=exchange,
                        queue=queue,
                        routing_key=routing_key)
+
+
+def initialize_dlq_topology(
+        channel: pika.adapters.blocking_connection.BlockingChannel,
+        retry_ttl_ms: int = RETRY_TTL_MS,
+) -> None:
+    '''Declares the dead-letter and retry queues for the contest pipeline.'''
+    channel.exchange_declare(
+        exchange=DEAD_LETTER_EXCHANGE,
+        exchange_type='direct',
+        durable=True,
+        auto_delete=False)
+    channel.queue_declare(
+        queue=DEAD_LETTER_QUEUE,
+        durable=True,
+        exclusive=False,
+        auto_delete=False)
+    channel.queue_bind(
+        exchange=DEAD_LETTER_EXCHANGE,
+        queue=DEAD_LETTER_QUEUE,
+        routing_key=DEAD_LETTER_ROUTING_KEY)
+
+    channel.queue_declare(
+        queue=RETRY_QUEUE,
+        durable=True,
+        exclusive=False,
+        auto_delete=False,
+        arguments={  # type: ignore[arg-type]
+            'x-message-ttl': retry_ttl_ms,
+            'x-dead-letter-exchange': CERTIFICATES_EXCHANGE,
+            'x-dead-letter-routing-key': CONTEST_ROUTING_KEY,
+        })
+    channel.queue_bind(
+        exchange=CERTIFICATES_EXCHANGE,
+        queue=RETRY_QUEUE,
+        routing_key=RETRY_ROUTING_KEY)
