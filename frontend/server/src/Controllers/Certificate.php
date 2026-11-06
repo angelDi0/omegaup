@@ -658,7 +658,12 @@ class Certificate extends \OmegaUp\Controllers\Controller {
             false,
             true,
             false,
-            false
+            false,
+            false,
+            new \PhpAmqpLib\Wire\AMQPTable([
+                'x-dead-letter-exchange' => 'certificates-dlx',
+                'x-dead-letter-routing-key' => 'ContestDeadLetter',
+            ])
         );
 
         $channel->queue_bind('contest', $exchange, $routingKey);

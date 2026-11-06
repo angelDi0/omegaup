@@ -471,7 +471,11 @@ class Utils {
             passive: false,
             durable: true,
             exclusive: false,
-            auto_delete: false
+            auto_delete: false,
+            arguments: new \PhpAmqpLib\Wire\AMQPTable([
+                'x-dead-letter-exchange' => 'certificates-dlx',
+                'x-dead-letter-routing-key' => 'ContestDeadLetter',
+            ])
         );
 
         $channel->exchange_declare(
