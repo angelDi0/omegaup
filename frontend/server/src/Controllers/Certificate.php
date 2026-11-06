@@ -684,13 +684,13 @@ class Certificate extends \OmegaUp\Controllers\Controller {
             'ranking' => $ranking,
         ];
         $messageJSON = json_encode($messageArray);
-        $message = new \PhpAmqpLib\Message\AMQPMessage(
-            $messageJSON,
-            ['delivery_mode' => \PhpAmqpLib\Message\AMQPMessage::DELIVERY_MODE_PERSISTENT]
-        );
 
-        // send the message to RabbitMQ
-        $channel->basic_publish($message, $exchange, $routingKey);
+        \OmegaUp\RabbitMQConnection::publishWithConfirmation(
+            $channel,
+            $exchange,
+            $routingKey,
+            $messageJSON
+        );
         $channel->close();
 
         $contest->certificates_status = 'queued';

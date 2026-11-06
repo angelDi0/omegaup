@@ -45,4 +45,63 @@ class RabbitMQConnection {
     public function channel(): \PhpAmqpLib\Channel\AMQPChannel {
         return $this->connection->channel();
     }
+
+    /**
+     * Publishes a persistent message and blocks until the broker confirms it.
+     */
+    public static function publishWithConfirmation(
+        \PhpAmqpLib\Channel\AMQPChannel $channel,
+        string $exchange,
+        string $routingKey,
+        string $messageBody,
+        float $timeout = 10.0
+    ): void {
+        $confirmed = true;
+
+        $channel->confirm_select();
+        $channel->set_nack_handler(
+            function (\PhpAmqpLib\Message\AMQPMessage $_message) use (
+                &$confirmed
+            ): void {
+                $confirmed = false;
+            }
+        );
+        $channel->set_return_listener(
+            function (
+                int $_replyCode,
+                string $_replyText,
+                string $_exchange,
+                string $_routingKey,
+                \PhpAmqpLib\Message\AMQPMessage $_message
+            ) use (&$confirmed): void {
+                $confirmed = false;
+            }
+        );
+
+        $message = new \PhpAmqpLib\Message\AMQPMessage(
+            $messageBody,
+            ['delivery_mode' => \PhpAmqpLib\Message\AMQPMessage::DELIVERY_MODE_PERSISTENT]
+        );
+
+        try {
+            $channel->basic_publish(
+                $message,
+                $exchange,
+                $routingKey,
+                mandatory: true
+            );
+            $channel->wait_for_pending_acks_returns($timeout);
+        } catch (\PhpAmqpLib\Exception\AMQPExceptionInterface $e) {
+            throw new \OmegaUp\Exceptions\ServiceUnavailableException(
+                'serviceUnavailableError',
+                $e
+            );
+        }
+
+        if (!$confirmed) {
+            throw new \OmegaUp\Exceptions\ServiceUnavailableException(
+                'serviceUnavailableError'
+            );
+        }
+    }
 }
